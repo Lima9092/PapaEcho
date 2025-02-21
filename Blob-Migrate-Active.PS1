@@ -24,7 +24,7 @@ Add-Type -AssemblyName System.Drawing
 $global:azCopyProcess = $null
 $global:currentRunLogFiles = @()
 $global:currentRunSummaries = @()
-$global:csvPath = ".\Blob-Migrations-Active.csv" # CSV file path
+$global:csvPath = ".\Blob-Migrate-Active.csv" # CSV file path
 $global:masterSummaryPath = ".\Blob-Master-Summary.csv" # Master summary CSV file path
 
 # Helper function to extract values from log content
