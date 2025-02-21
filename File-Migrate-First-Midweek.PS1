@@ -24,7 +24,7 @@ Add-Type -AssemblyName System.Drawing
 $global:robocopyProcess = $null
 $global:currentRunLogFiles = @()
 $global:currentRunSummaries = @()
-$global:csvPath = ".\File-Migrations-First-Midweek.csv" # CSV file path
+$global:csvPath = ".\File-Migrate-First-Midweek.csv" # CSV file path
 $global:masterSummaryPath = ".\File-Master-Summary.csv" # Master summary CSV file path
 
 # Set Logs Folder Location
