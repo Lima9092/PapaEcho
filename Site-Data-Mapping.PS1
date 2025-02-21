@@ -96,7 +96,6 @@ $grid.SelectionMode = [System.Windows.Forms.DataGridViewSelectionMode]::FullRowS
 $grid.MultiSelect = $true
 $form.Controls.Add($grid)
 
-
 # Create a DataTable as the grid's data source
 $dt = New-Object System.Data.DataTable
 $dt.Columns.Add("Site ID")       | Out-Null
@@ -105,7 +104,6 @@ $dt.Columns.Add("Source")        | Out-Null
 $dt.Columns.Add("Destination")   | Out-Null
 
 $grid.DataSource = $dt.DefaultView
-
 
 # Row PrePaint Event: Highlight rows based on Destination value
 $grid.add_RowPrePaint({
@@ -327,7 +325,6 @@ $btnSave.Add_Click({
          }
     }
 })
-
 
 # Handle Form Resize to Adjust Grid Size
 $form.Add_Resize({
