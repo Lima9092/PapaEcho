@@ -126,9 +126,16 @@ function Run-SubsequentCopy {
         $tagValue
     )
     try {
+        # Set verbose log location for subsequent copy (same as for initial copy)
+        $logFolder = Join-Path -Path $PSScriptRoot -ChildPath "Logs\$siteId\Blob-VerboseLogs"
+        if (-not (Test-Path $logFolder)) {
+            New-Item -ItemType Directory -Path $logFolder -Force | Out-Null
+        }
+        $env:AZCOPY_LOG_LOCATION = $logFolder
+
         # Build the source URL from the initial copy destination (using AzureContainer)
         $sourceUrl = "https://$storageAccount.blob.core.windows.net/$AzureContainer`?$sasToken"
-        # Build the destination URL using the ActiveContainer variable (no SiteID appended)
+        # Build the destination URL using the ActiveContainer variable
         $destinationUrl = "https://$storageAccount.blob.core.windows.net/$ActiveContainer`?$sasToken"
         $outputBox.AppendText("Executing subsequent copy..." + [Environment]::NewLine)
         $outputBox.AppendText("Source: $sourceUrl" + [Environment]::NewLine)
@@ -303,6 +310,18 @@ $migrationListBox.Location = New-Object System.Drawing.Point(20, 20)
 $migrationListBox.Size = New-Object System.Drawing.Size(560, 150)
 $form.Controls.Add($migrationListBox)
 
+# When loading the CSV, also display the ExcludeActive flag for clarity.
+try {
+    # Check for Active.csv
+    $migrations = Import-Csv $global:csvPath
+    foreach ($migration in $migrations) {
+        $migrationListBox.Items.Add("Site ID: $($migration.'Site ID'), Name: $($migration.Name), Source: $($migration.Source), Azure Container: $($migration.AzureContainer), Active Container: $($migration.ActiveContainer), ExcludeActive: $($migration.ExcludeActive)")
+    }
+}
+catch {
+    [System.Windows.Forms.MessageBox]::Show("Error loading CSV file: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
+}
+
 $tagNameLabel = New-Object System.Windows.Forms.Label
 $tagNameLabel.Text = "Tag Name:"
 $tagNameLabel.Location = New-Object System.Drawing.Point(20,180)
@@ -400,33 +419,6 @@ $progressBar.Location = New-Object System.Drawing.Point(130,490)
 $progressBar.Size = New-Object System.Drawing.Size(450,30)
 $form.Controls.Add($progressBar)
 
-# Load CSV data
-try {
-    # Check for Active.csv
-    $migrations = Import-Csv $global:csvPath
-    foreach ($migration in $migrations) {
-        $migrationListBox.Items.Add("Site ID: $($migration.'Site ID'), Name: $($migration.Name), Source: $($migration.Source), Azure Container: $($migration.AzureContainer), Active Container: $($migration.ActiveContainer)")
-    }
-}
-catch {
-    [System.Windows.Forms.MessageBox]::Show("Error loading CSV file: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-}
-
-# Check if the master summary file exists; if not, create an empty one
-if (-not (Test-Path $global:masterSummaryPath)) {
-    try {
-        # Create an empty master summary CSV file with the necessary headers
-        $emptyMasterSummary = @"
-SiteID,LogFileName,JobName,JobId,Source,Destination,MigrationType,StartDate,StartTime,EndDate,EndTime,Duration (Mins),TotalFiles,TotalTransfers,FinalJobStatus
-"@
-        $emptyMasterSummary | Out-File -FilePath $global:masterSummaryPath -Encoding UTF8
-        $outputBox.AppendText("Created new master summary file at $global:masterSummaryPath" + [Environment]::NewLine)
-    }
-    catch {
-        [System.Windows.Forms.MessageBox]::Show("Error creating master summary file: $_", "Error", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)
-    }
-}
-
 # Function to wait until the scheduled start time
 function Wait-ForScheduledStart {
    param (
@@ -473,14 +465,19 @@ $runButton.Add_Click({
                    -tagValue $tagValueBox.Text
         $progressBar.Value += 1
         [System.Windows.Forms.Application]::DoEvents()
-        # Run subsequent copy (with filtering and blob-tags applied)
-        Run-SubsequentCopy -siteId $selectedMigration.'Site ID' `
-                           -storageAccount $selectedMigration.StorageAccount `
-                           -sasToken $selectedMigration.'SAS Token' `
-                           -AzureContainer $selectedMigration.AzureContainer `
-                           -ActiveContainer $selectedMigration.ActiveContainer `
-                           -tagName $tagNameBox.Text `
-                           -tagValue $tagValueBox.Text
+        # Only run subsequent copy if ExcludeActive is not set to Y/Yes
+        if (-not ($selectedMigration.ExcludeActive -match '^(?i)(Y(es)?)$')) {
+            Run-SubsequentCopy -siteId $selectedMigration.'Site ID' `
+                               -storageAccount $selectedMigration.StorageAccount `
+                               -sasToken $selectedMigration.'SAS Token' `
+                               -AzureContainer $selectedMigration.AzureContainer `
+                               -ActiveContainer $selectedMigration.ActiveContainer `
+                               -tagName $tagNameBox.Text `
+                               -tagValue $tagValueBox.Text
+        }
+        else {
+            $outputBox.AppendText("Subsequent copy skipped for Site ID: $($selectedMigration.'Site ID') due to ExcludeActive flag." + [Environment]::NewLine)
+        }
         $progressBar.Value += 1
         [System.Windows.Forms.Application]::DoEvents()
     }
@@ -509,13 +506,19 @@ $runAllButton.Add_Click({
                    -tagValue $tagValueBox.Text
         $progressBar.Value += 1
         [System.Windows.Forms.Application]::DoEvents()
-        Run-SubsequentCopy -siteId $migration.'Site ID' `
-                           -storageAccount $migration.StorageAccount `
-                           -sasToken $migration.'SAS Token' `
-                           -AzureContainer $migration.AzureContainer `
-                           -ActiveContainer $migration.ActiveContainer `
-                           -tagName $tagNameBox.Text `
-                           -tagValue $tagValueBox.Text
+        # Check the ExcludeActive flag before running the subsequent copy
+        if (-not ($migration.ExcludeActive -match '^(?i)(Y(es)?)$')) {
+            Run-SubsequentCopy -siteId $migration.'Site ID' `
+                               -storageAccount $migration.StorageAccount `
+                               -sasToken $migration.'SAS Token' `
+                               -AzureContainer $migration.AzureContainer `
+                               -ActiveContainer $migration.ActiveContainer `
+                               -tagName $tagNameBox.Text `
+                               -tagValue $tagValueBox.Text
+        }
+        else {
+            $outputBox.AppendText("Subsequent copy skipped for Site ID: $($migration.'Site ID') due to ExcludeActive flag." + [Environment]::NewLine)
+        }
         $progressBar.Value += 1
         [System.Windows.Forms.Application]::DoEvents()
     }
@@ -590,15 +593,16 @@ $helpButton.Add_Click({
         "4. StorageAccount: The name of the Azure Storage account." + [Environment]::NewLine +
         "5. AzureContainer: The name of the container in the Azure Storage account for the initial copy (e.g. 'sitea')." + [Environment]::NewLine +
         "6. ActiveContainer: The name of the destination container for the subsequent copy (e.g. 'active')." + [Environment]::NewLine +
-        "7. SAS Token: The Shared Access Signature (SAS) token for the container." + [Environment]::NewLine + [Environment]::NewLine +
+        "7. SAS Token: The Shared Access Signature (SAS) token for the container." + [Environment]::NewLine +
+        "8. ExcludeActive: Set to 'Y' or 'Yes' to skip the subsequent (Active) copy for this job." + [Environment]::NewLine + [Environment]::NewLine +
         "How the GUI Works:" + [Environment]::NewLine +
         "--------------------------" + [Environment]::NewLine +
         "1. The list box displays all the available migrations from the CSV file." + [Environment]::NewLine +
         "2. Enter the Tag Name and Tag Value to be applied only to the subsequent copy operation." + [Environment]::NewLine +
         "3. Select one or more migrations from the list and click 'Run' to start the migration(s)." + [Environment]::NewLine +
         "4. To run all migrations in sequence, click 'Run All'." + [Environment]::NewLine +
-        "5. The initial copy is performed first (copying everything to the AzureContainer), then a subsequent copy is done (copying only *.jpg and *.bmp files) to the ActiveContainer." + [Environment]::NewLine +
-        "6. The log output will be displayed in the text box below the list." + [Environment]::NewLine +
+        "5. The initial copy is performed first (copying everything to the AzureContainer), then a subsequent copy is done (filtering files and applying blob-tags) to the ActiveContainer (unless excluded via the ExcludeActive flag)." + [Environment]::NewLine +
+        "6. The log output will be displayed in the text box below the list and saved in the specified verbose logs folder." + [Environment]::NewLine +
         "7. Click 'View Summary' to see details of the completed migrations." + [Environment]::NewLine +
         "8. Use the 'Cancel' button to stop the current operation." + [Environment]::NewLine +
         "9. The progress bar shows the overall progress of the operation." + [Environment]::NewLine +
