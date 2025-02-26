@@ -102,6 +102,8 @@ $dt.Columns.Add("Site ID")       | Out-Null
 $dt.Columns.Add("Name")          | Out-Null
 $dt.Columns.Add("Source")        | Out-Null
 $dt.Columns.Add("Destination")   | Out-Null
+# New column for ExcludeActive
+$dt.Columns.Add("ExcludeActive") | Out-Null
 
 $grid.DataSource = $dt.DefaultView
 
@@ -131,9 +133,19 @@ $menuItemCopyCSV.Add_Click({
     foreach ($row in $grid.SelectedRows) {
         $cells = @()
         foreach ($cell in $row.Cells) {
-            $val = $cell.Value
-            if ($val -eq $null) { $val = "" }
-            $cells += $val.ToString()
+            if ($cell.OwningColumn.Name -eq "ExcludeActive") {
+                $val = $cell.Value
+                # Only add this column if the value is Y/Yes/N/No (case-insensitive)
+                if ($val -and ($val.Trim().ToUpper() -eq "Y" -or $val.Trim().ToUpper() -eq "YES" -or $val.Trim().ToUpper() -eq "N" -or $val.Trim().ToUpper() -eq "NO")) {
+                    $cells += $val.ToString()
+                }
+                # Otherwise, skip adding this column
+            }
+            else {
+                $val = $cell.Value
+                if ($val -eq $null) { $val = "" }
+                $cells += $val.ToString()
+            }
         }
         $csvText += ($cells -join ",") + "`r`n"
     }
@@ -182,7 +194,7 @@ $btnRun.Add_Click({
         return
     }
 
-# Require both Legacy-Root and Legacy-Share
+    # Require both Legacy-Root and Legacy-Share
     $legacyRoot = $selectedSite.'Legacy-Root'
     $legacyShare = $selectedSite.'Legacy-Share'
     if ([string]::IsNullOrEmpty($legacyRoot)) {
@@ -206,7 +218,7 @@ $btnRun.Add_Click({
         return
     }
 
-# List directories directly in the share folder
+    # List directories directly in the share folder
     try {
         $subDirs = Get-ChildItem -Path $basePath -Directory -ErrorAction Stop
     }
@@ -227,6 +239,7 @@ $btnRun.Add_Click({
                 $dr["Name"] = "$($selectedSite.'Site-Name') Access Denied"
                 $dr["Source"] = $subDir.FullName
                 $dr["Destination"] = "Access Denied"
+                $dr["ExcludeActive"] = ""
                 $dt.Rows.Add($dr)
                 continue
             }
@@ -252,6 +265,14 @@ $btnRun.Add_Click({
                         $dr["Name"] = $name
                         $dr["Source"] = $sourcePath
                         $dr["Destination"] = $destination
+                        # Process ExcludeActive value
+                        $excludeValue = $m.'ExcludeActive'
+                        if ($excludeValue -and ($excludeValue.Trim().ToUpper() -eq "Y" -or $excludeValue.Trim().ToUpper() -eq "YES" -or $excludeValue.Trim().ToUpper() -eq "N" -or $excludeValue.Trim().ToUpper() -eq "NO")) {
+                            $dr["ExcludeActive"] = $excludeValue.Trim()
+                        }
+                        else {
+                            $dr["ExcludeActive"] = ""
+                        }
                         $dt.Rows.Add($dr)
                     }
                 }
@@ -263,6 +284,7 @@ $btnRun.Add_Click({
                     $dr["Name"] = $name
                     $dr["Source"] = $sourcePath
                     $dr["Destination"] = "Non standard share found"
+                    $dr["ExcludeActive"] = ""
                     $dt.Rows.Add($dr)
                 }
             }
@@ -289,6 +311,14 @@ $btnRun.Add_Click({
                     $dr["Name"] = $name
                     $dr["Source"] = $sourcePath
                     $dr["Destination"] = $destination
+                    # Process ExcludeActive value
+                    $excludeValue = $m.'ExcludeActive'
+                    if ($excludeValue -and ($excludeValue.Trim().ToUpper() -eq "Y" -or $excludeValue.Trim().ToUpper() -eq "YES" -or $excludeValue.Trim().ToUpper() -eq "N" -or $excludeValue.Trim().ToUpper() -eq "NO")) {
+                        $dr["ExcludeActive"] = $excludeValue.Trim()
+                    }
+                    else {
+                        $dr["ExcludeActive"] = ""
+                    }
                     $dt.Rows.Add($dr)
                 }
             }
@@ -300,6 +330,7 @@ $btnRun.Add_Click({
                 $dr["Name"] = $name
                 $dr["Source"] = $sourcePath
                 $dr["Destination"] = "Non standard share found"
+                $dr["ExcludeActive"] = ""
                 $dt.Rows.Add($dr)
             }
         }
