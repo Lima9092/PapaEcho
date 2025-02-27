@@ -1,0 +1,6 @@
+Source-Path,Destination-Path,Data Type, ExcludeActive
+\home\student, "<storageAccount>, <studentcontainer>/<sitecode>, <SASToken>", <sitename> Student Home, No
+"\home\old student", "<storageAccount>, <studentcontainer>/<sitecode>/Old-Student, <SASToken>", <sitename> Old Student Home, Yes
+\home\staff,\\<storageAccount>.file.core.windows.net\<staffpersonalshare>\<sitecode>\Staff,<sitename> Staff Home, NA
+\shares\student,\\<storageAccount>.file.core.windows.net\<sitecode>-studentshare,<sitename> Student Share, NA
+\shares\staff,\\<storageAccount>.file.core.windows.net\<sitecode>-teachershare\Staff,<sitename> Staff Share, NA
