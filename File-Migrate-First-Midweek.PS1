@@ -424,14 +424,22 @@ $runButton.Add_Click({
             Wait-ForScheduledStart -scheduledTime $startTimeBox.Text
         }
 
+        # Initialize progress bar values
+        $progressBar.Minimum = 0
+        $progressBar.Maximum = [Math]::Max(1, $migrationListBox.SelectedIndices.Count)
         $progressBar.Value = 0
-        $progressBar.Maximum = $migrationListBox.SelectedIndices.Count
         $global:currentRunSummaries = @()
 
         foreach ($index in $migrationListBox.SelectedIndices) {
             $selectedMigration = $migrations[$index]
             Run-Robocopy -siteId $selectedMigration.'Site ID' -name $selectedMigration.Name -source $selectedMigration.Source -destination $selectedMigration.Destination
-            $progressBar.Invoke([Action]{ $progressBar.Value += 1 })
+
+            # Safely increment progress bar value
+            $progressBar.Invoke([Action]{
+                if ($progressBar.Value -lt $progressBar.Maximum) {
+                    $progressBar.Value += 1
+                }
+            })
             [System.Windows.Forms.Application]::DoEvents()
         }
 
@@ -446,6 +454,7 @@ $runButton.Add_Click({
     }
 })
 
+
 $runAllButton.Add_Click({
     try {
         if ($migrations.Count -eq 0) {
@@ -457,8 +466,10 @@ $runAllButton.Add_Click({
             Wait-ForScheduledStart -scheduledTime $startTimeBox.Text
         }
 
+        # Initialize progress bar values
+        $progressBar.Minimum = 0
+        $progressBar.Maximum = [Math]::Max(1, $migrations.Count)
         $progressBar.Value = 0
-        $progressBar.Maximum = $migrations.Count
         $global:currentRunSummaries = @()
 
         foreach ($migration in $migrations) {
@@ -472,7 +483,13 @@ $runAllButton.Add_Click({
                 $outputBox.AppendText("Completed: $($migration.Name)" + [Environment]::NewLine)
                 $outputBox.ScrollToCaret()
             })
-            $progressBar.Invoke([Action]{ $progressBar.Value += 1 })
+
+            # Safely increment progress bar value
+            $progressBar.Invoke([Action]{
+                if ($progressBar.Value -lt $progressBar.Maximum) {
+                    $progressBar.Value += 1
+                }
+            })
             [System.Windows.Forms.Application]::DoEvents()
         }
 
