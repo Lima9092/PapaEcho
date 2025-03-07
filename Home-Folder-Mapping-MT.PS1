@@ -1,6 +1,6 @@
 # Configuration
 $numberOfThreads = 6  # Configurable number of threads, default is 6
-$pathtranslation = "\\storageaccount.files.core.windows.net\staffhomefolders\"
+$pathtranslation = "\\storageaccount.file.core.windows.net\staffhomefolders\"
 $fuzzyThreshold = 0.75
 
 # Minimize the Console Window
@@ -188,6 +188,16 @@ if (Test-Path $metadataPath) {
 }
 else {
     [System.Windows.Forms.MessageBox]::Show("site-metadata.csv not found in $scriptDir", "Error", "OK", "Error")
+}
+
+# --- Load data-standards.csv ---
+$dsPath = Join-Path $scriptDir "data-standards.csv"
+if (Test-Path $dsPath) {
+    $global:dataStandards = Import-Csv -Path $dsPath
+}
+else {
+    Write-Warning "data-standards.csv not found. Using default mapping logic."
+    $global:dataStandards = @()
 }
 
 $comboBoxSite.Add_SelectedIndexChanged({
@@ -409,7 +419,7 @@ $buttonRun.Add_Click({
     foreach ($batch in $userBatches) {
         $batchUsers = $batch.Group
         $jobs += Start-ThreadJob -ScriptBlock {
-            param($users, $folderInfoList, $pathtranslation, $textBoxDir, $fuzzyThreshold, $selectedSite)
+            param($users, $folderInfoList, $pathtranslation, $textBoxDir, $fuzzyThreshold, $selectedSite, $dataStandards)
             
             # Re-import functions into the thread scope
             function Get-LevenshteinDistance {
@@ -511,6 +521,72 @@ $buttonRun.Add_Click({
                 return $false
             }
 
+            # Helper function to translate the path based on data standards
+            function Translate-Path {
+			param(
+				[string]$uncPath,
+				[string]$baseDir,
+				[string]$pathtranslation,
+				[string]$siteCode,
+				[array]$dataStandards
+			)
+			# Ensure the base directory ends with a backslash
+			if (-not $baseDir.EndsWith("\")) { $baseDir += "\" }
+			
+			# Calculate the relative path from the base directory (the suffix portion of the source)
+			$relativePath = $uncPath.Substring($baseDir.Length).TrimStart("\")
+			
+			# Loop through each CSV rule to see if the relative path starts with a defined suffix pattern
+			foreach ($rule in $dataStandards) {
+				# CSV's Source-Path is used to match against the relative path (remove any leading backslashes)
+				$ruleSuffix = $rule.'Source-Path'.TrimStart("\")
+				if ($relativePath.StartsWith($ruleSuffix, [System.StringComparison]::InvariantCultureIgnoreCase)) {
+					# Get what remains of the relative path after the rule's source suffix is removed
+					$remainingPath = $relativePath.Substring($ruleSuffix.Length).TrimStart("\")
+					
+					# Get the destination value from the CSV and replace tokens (like <sitecode>)
+					$destinationSuffix = $rule.'Destination-Path'.Trim() -replace "<sitecode>", $siteCode
+					
+					# If the CSV destination value includes a UNC prefix, remove it (and remove the site code, if present)
+					if ($destinationSuffix.StartsWith("\\")) {
+						$idx = $destinationSuffix.IndexOf($siteCode)
+						if ($idx -ge 0) {
+							# Remove everything up through the site code
+							$destinationSuffix = $destinationSuffix.Substring($idx + $siteCode.Length)
+							$destinationSuffix = $destinationSuffix.TrimStart("\")
+						}
+						else {
+							# Fallback: split on "\" and take the parts after a fixed number of items
+							$parts = $destinationSuffix.Split("\")
+							if ($parts.Length -ge 5) {
+								$destinationSuffix = ($parts[4..($parts.Length - 1)] -join "\")
+							}
+							else {
+								$destinationSuffix = ""
+							}
+						}
+					}
+					
+					# Combine the cleaned-up destination suffix with any remaining path from the source
+					if ($destinationSuffix -ne "" -and $remainingPath -ne "") {
+						$newRelativePath = $destinationSuffix + "\" + $remainingPath
+					}
+					elseif ($destinationSuffix -ne "") {
+						$newRelativePath = $destinationSuffix
+					}
+					else {
+						$newRelativePath = $remainingPath
+					}
+					
+					# Build and return the full destination path using the fixed prefix plus the transformed suffix
+					return $pathtranslation + $siteCode + "\" + $newRelativePath
+				}
+			}
+			
+			# If no CSV rule matches, return the default transformation (fixed prefix plus original relative path)
+			return $pathtranslation + $siteCode + "\" + $relativePath
+		}
+
             $results = @()
             foreach ($user in $users) {
                 if ($user.UPN) {
@@ -522,12 +598,8 @@ $buttonRun.Add_Click({
                     $matchesForUser = @()
                     foreach ($folder in $folderInfoList) {
                         if (IsMatch $folder.FolderName $nameParts) {
-                            $basePath = $textBoxDir.Trim()
-                            if (-not $basePath.EndsWith("\")) { $basePath += "\" }
-                            $relativePath = $folder.UNCPath.Substring($basePath.Length)
-                            if ($relativePath.StartsWith("\")) { $relativePath = $relativePath.Substring(1) }
                             $siteCode = ($selectedSite.'Site-Code').Trim()
-                            $newSource = $pathtranslation + $siteCode + "\" + $relativePath
+                            $newSource = Translate-Path -uncPath $folder.UNCPath -baseDir $textBoxDir -pathtranslation $pathtranslation -siteCode $siteCode -dataStandards $dataStandards
                             
                             $matchesForUser += [PSCustomObject]@{
                                 "Email"       = $email
@@ -554,12 +626,8 @@ $buttonRun.Add_Click({
                             }
                         }
                         if ($bestScore -ge $fuzzyThreshold -and $bestMatch -ne $null) {
-                            $basePath = $textBoxDir.Trim()
-                            if (-not $basePath.EndsWith("\")) { $basePath += "\" }
-                            $relativePath = $bestMatch.UNCPath.Substring($basePath.Length)
-                            if ($relativePath.StartsWith("\")) { $relativePath = $relativePath.Substring(1) }
                             $siteCode = ($selectedSite.'Site-Code').Trim()
-                            $newSource = $pathtranslation + $siteCode + "\" + $relativePath
+                            $newSource = Translate-Path -uncPath $bestMatch.UNCPath -baseDir $textBoxDir -pathtranslation $pathtranslation -siteCode $siteCode -dataStandards $dataStandards
                             
                             $results += [PSCustomObject]@{
                                 "Email"       = $email
@@ -594,7 +662,7 @@ $buttonRun.Add_Click({
                 }
             }
             return $results
-        } -ArgumentList @($batchUsers, $folderInfoList, $pathtranslation, $textBoxDir.Text, $fuzzyThreshold, $global:selectedSite)
+        } -ArgumentList @($batchUsers, $folderInfoList, $pathtranslation, $textBoxDir.Text, $fuzzyThreshold, $global:selectedSite, $global:dataStandards)
     }
 
     # Wait for all jobs to complete and collect results
