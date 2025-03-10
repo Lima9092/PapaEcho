@@ -187,23 +187,44 @@ function Parse-RobocopyLog {
     }
 
     foreach ($line in $logContent) {
-        # Extract total files, directories, and skipped files
+        # Extract total files, directories, and skipped files from Files and Dirs lines
         if ($line -match "^\s*Files\s+:\s+\d+\s+(\d+)\s+(\d+)\s+\d+") {
             $summary.TotalFiles = [int]$matches[1]
             $summary.Skipped = [int]$matches[2]
         }
-
         if ($line -match "^\s*Dirs\s+:\s+\d+\s+(\d+)\s+(\d+)\s+\d+") {
             $summary.TotalDirs = [int]$matches[1]
         }
 
-        # Extract total size in bytes
-        if ($line -match "^\s*Bytes\s+:\s+([\d,]+)") {
-            $totalBytes = [int64]($matches[1] -replace ",", "")
-            $summary.TotalSizeGB = [math]::Round($totalBytes / 1GB, 2)  # Convert to GB
+        # Extract total size (Total column only) from the Bytes line
+        if ($line -match "^\s*Bytes\s+:\s+(.*)") {
+            # Split the part after the colon into columns
+            $columns = $matches[1].Trim() -split "\s+"
+            if ($columns.Length -ge 2) {
+                $sizeValue = $columns[0] -replace ",", ""
+                $sizeUnit = $columns[1].ToLower()
+
+                if ($sizeUnit -eq "g") {
+                    # Value already in gigabytes
+                    $summary.TotalSizeGB = [math]::Round([double]$sizeValue, 2)
+                }
+                elseif ($sizeUnit -eq "m") {
+                    # Convert megabytes to gigabytes
+                    $summary.TotalSizeGB = [math]::Round([double]$sizeValue / 1024, 2)
+                }
+                elseif ($sizeUnit -eq "k") {
+                    # Convert kilobytes to gigabytes
+                    $summary.TotalSizeGB = [math]::Round([double]$sizeValue / (1024 * 1024), 2)
+                }
+                else {
+                    # If no unit is specified, assume the value is in bytes
+                    $totalBytes = [int64]$sizeValue
+                    $summary.TotalSizeGB = [math]::Round($totalBytes / 1GB, 2)
+                }
+            }
         }
 
-        # Extract failed files and directories
+        # Extract failed files and directories from Files line
         if ($line -match "^\s*Files\s+:\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)") {
             $summary.Failed = [int]$matches[1]
         }
@@ -211,8 +232,8 @@ function Parse-RobocopyLog {
         # Extract speed in Bytes/sec
         if ($line -match "^\s*Speed\s*:\s*([\d,]+) Bytes/sec") {
             $summary.SpeedBytesPerSec = [int]($matches[1] -replace ",", "")
-            $summary.SpeedMbps = [math]::Round($summary.SpeedBytesPerSec * 8 / 1MB, 2)  # Convert Bytes/sec to Mbps
-            $summary.SpeedGBperHour = [math]::Round($summary.SpeedBytesPerSec * 3600 / 1GB, 2)  # Convert to GB/hour
+            $summary.SpeedMbps = [math]::Round($summary.SpeedBytesPerSec * 8 / 1MB, 2)
+            $summary.SpeedGBperHour = [math]::Round($summary.SpeedBytesPerSec * 3600 / 1GB, 2)
         }
 
         # Capture error messages
@@ -223,7 +244,6 @@ function Parse-RobocopyLog {
 
     return $summary
 }
-
 # Summarize logs
 function Summarize-Logs {
     if ($global:currentRunSummaries.Count -eq 0) {
