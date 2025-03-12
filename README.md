@@ -1,5 +1,3 @@
-I'll create comprehensive documentation for these PowerShell migration scripts for your GitHub repository. The documentation will include an overview of each script, prerequisites, input file requirements, and usage instructions.
-
 # Data Migration Toolset
 
 A collection of PowerShell GUI tools for discovering, mapping, and migrating file shares to Azure Storage.
