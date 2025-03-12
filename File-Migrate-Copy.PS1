@@ -102,7 +102,7 @@ function Run-Robocopy {
         # Base Robocopy command arguments as an array
         $robocopyArgs = @(
             "`"$source`"", "`"$destination`"",
-            "/E", "/COPY:DAT", "/R:10", "/W:5", "/V", "/XO", "/MT:32", "/LOG:`"$logFilePath`""
+            "/E", "/COPY:DAT", "/R:0", "/W:0", "/zb", "/TEE", "/V", "/XO", "/MT:32", "/LOG:`"$logFilePath`""
         )
 
         # Add /MIR if the Mirror checkbox is checked
